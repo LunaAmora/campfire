@@ -58,7 +58,7 @@ where
 
 impl<F, R1: RefType, R2: RefType> Querry<(R1, R2)> for F
 where
-    F: for<'f> Fn(R1::Ref<'f>, R2::Ref<'f>) + Clone,
+    F: for<'f1, 'f2> Fn(R1::Ref<'f1>, R2::Ref<'f2>) + Clone,
     R1::Type: Component,
     R2::Type: Component,
 {
