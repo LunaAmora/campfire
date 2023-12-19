@@ -46,12 +46,12 @@ where
     R::Type: Component,
 {
     fn call(self, data: &mut EntityData) {
-        if let Some(mut arg1) = R::Type::from_data(data) {
+        if let Some(mut arg1) = data.get::<R>() {
             let a = R::borrow(&mut arg1);
 
             (self)(a);
 
-            R::mutate(arg1, data);
+            data.update::<R>(arg1);
         }
     }
 }
@@ -63,15 +63,14 @@ where
     R2::Type: Component,
 {
     fn call(self, data: &mut EntityData) {
-        if let Some((mut arg1, mut arg2)) = R1::Type::from_data(data).zip(R2::Type::from_data(data))
-        {
+        if let Some((mut arg1, mut arg2)) = data.get::<R1>().zip(data.get::<R2>()) {
             let a = R1::borrow(&mut arg1);
             let b = R2::borrow(&mut arg2);
 
             (self)(a, b);
 
-            R1::mutate(arg1, data);
-            R2::mutate(arg2, data);
+            data.update::<R1>(arg1);
+            data.update::<R2>(arg2);
         }
     }
 }

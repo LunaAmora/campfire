@@ -6,6 +6,7 @@ use std::{
     collections::HashMap,
     error::{Error, Request},
     fmt::{Debug, Display},
+    ops::{Deref, DerefMut},
 };
 
 pub mod context;
@@ -15,7 +16,39 @@ pub mod system;
 #[derive(Clone, Copy)]
 pub struct EntityId(pub usize);
 
-pub type EntityData = HashMap<TypeId, Data>;
+#[derive(Default)]
+pub struct EntityData(HashMap<TypeId, Data>);
+
+impl Deref for EntityData {
+    type Target = HashMap<TypeId, Data>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for EntityData {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl EntityData {
+    pub fn get<R: family::RefType>(&self) -> Option<R::Type>
+    where
+        R::Type: Component,
+    {
+        R::Type::from_data(self)
+    }
+
+    pub fn update<R: family::RefType>(&mut self, t: R::Type)
+    where
+        R::Type: Component,
+    {
+        let (id, comp) = new_data(t);
+        self.0.insert(id, comp);
+    }
+}
 
 #[derive(Hash, PartialEq, Eq)]
 pub struct ComponentId(pub usize);
@@ -46,7 +79,7 @@ impl<C: Debug + Clone> Error for RawComponent<C> {
 }
 
 pub trait Component: Debug + Clone + 'static {
-    fn from_data(data: &EntityData) -> Option<Self> {
+    fn from_data(EntityData(data): &EntityData) -> Option<Self> {
         data.get(&TypeId::of::<Self>())
             .and_then(|Data(c)| request_value::<Self>(&**c))
     }

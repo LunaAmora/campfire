@@ -1,5 +1,3 @@
-use crate::{new_data, Component, EntityData};
-
 pub trait RefType {
     type Type;
     type Ref<'r>
@@ -7,11 +5,6 @@ pub trait RefType {
         Self::Type: 'r;
 
     fn borrow(t: &mut Self::Type) -> Self::Ref<'_>;
-    fn mutate(_: Self::Type, _: &mut EntityData)
-    where
-        Self::Type: Component,
-    {
-    }
 }
 
 impl<'a, T> RefType for &'a T {
@@ -29,13 +22,5 @@ impl<'a, T> RefType for &'a mut T {
 
     fn borrow(t: &mut Self::Type) -> Self::Ref<'_> {
         t
-    }
-
-    fn mutate(t: Self::Type, data: &mut EntityData)
-    where
-        Self::Type: Component,
-    {
-        let (id, comp) = new_data(t);
-        data.insert(id, comp);
     }
 }
