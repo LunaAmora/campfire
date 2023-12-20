@@ -1,13 +1,20 @@
+#![feature(associated_type_bounds)]
 #![feature(error_generic_member_access)]
 #![feature(error_in_core)]
+#![feature(try_blocks)]
+
 use core::error::request_value;
 use std::{
     any::{Any, TypeId},
+    cell::RefCell,
     collections::HashMap,
     error::{Error, Request},
     fmt::{Debug, Display},
-    ops::{Deref, DerefMut},
+    marker::PhantomData,
+    mem::ManuallyDrop,
 };
+
+use family::RefType;
 
 pub mod context;
 pub mod family;
@@ -17,36 +24,45 @@ pub mod system;
 pub struct EntityId(pub usize);
 
 #[derive(Default)]
-pub struct EntityData(HashMap<TypeId, Data>);
+pub struct EntityData(RefCell<HashMap<TypeId, Data>>);
 
-impl Deref for EntityData {
-    type Target = HashMap<TypeId, Data>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for EntityData {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+impl EntityData {
+    pub fn extend<T>(&mut self, iter: T)
+    where
+        T: IntoIterator<Item = (TypeId, Data)>,
+    {
+        self.0.borrow_mut().extend(iter)
     }
 }
 
 impl EntityData {
-    pub fn get<R: family::RefType>(&self) -> Option<R::Type>
-    where
-        R::Type: Component,
-    {
-        R::Type::from_data(self)
+    pub fn get<R: RefType<Type: Component>>(&self) -> Option<DataRef<R>> {
+        R::Type::from_data(self).map(|data| DataRef(ManuallyDrop::new(data), self, PhantomData))
     }
 
-    pub fn update<R: family::RefType>(&mut self, t: R::Type)
-    where
-        R::Type: Component,
-    {
+    pub fn update<R: RefType<Type: Component>>(&self, t: R::Type) {
         let (id, comp) = new_data(t);
-        self.0.insert(id, comp);
+        self.0.borrow_mut().insert(id, comp);
+    }
+}
+
+pub struct DataRef<'entity, R: RefType<Type: Component>>(
+    ManuallyDrop<R::Type>,
+    &'entity EntityData,
+    PhantomData<R>,
+);
+
+impl<'entity, R: RefType<Type: Component>> DataRef<'entity, R> {
+    pub fn borrow(&mut self) -> R::Ref<'_> {
+        R::borrow(&mut self.0)
+    }
+}
+
+impl<'entity, R: RefType<Type: Component>> Drop for DataRef<'entity, R> {
+    fn drop(&mut self) {
+        let DataRef(data, entity_data, _) = self;
+        let data = unsafe { ManuallyDrop::take(data) };
+        entity_data.update::<R>(data);
     }
 }
 
@@ -80,7 +96,8 @@ impl<C: Debug + Clone> Error for RawComponent<C> {
 
 pub trait Component: Debug + Clone + 'static {
     fn from_data(EntityData(data): &EntityData) -> Option<Self> {
-        data.get(&TypeId::of::<Self>())
+        data.borrow()
+            .get(&TypeId::of::<Self>())
             .and_then(|Data(c)| request_value::<Self>(&**c))
     }
 }

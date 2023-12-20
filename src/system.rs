@@ -14,7 +14,7 @@ pub fn new<C: 'static>(querry: impl Querry<C> + 'static) -> Box<dyn System> {
 
 struct QuerryHandler<Q> {
     pub querry: Q,
-    pub callable: fn(Q, &mut EntityData),
+    pub callable: fn(Q, &EntityData),
 }
 
 impl<Q: Clone> Clone for QuerryHandler<Q> {
@@ -37,40 +37,32 @@ impl<Q: Clone> System for QuerryHandler<Q> {
 }
 
 pub trait Querry<C>: Clone {
-    fn call(self, data: &mut EntityData);
+    fn call(self, data: &EntityData);
 }
 
-impl<F, R: RefType> Querry<R> for F
+impl<F, R> Querry<R> for F
 where
-    F: for<'f> Fn(<R as RefType>::Ref<'f>) + Clone,
-    R::Type: Component,
+    F: for<'f> Fn(R::Ref<'f>) + Clone,
+    R: RefType<Type: Component>,
 {
-    fn call(self, data: &mut EntityData) {
+    fn call(self, data: &EntityData) {
         if let Some(mut arg1) = data.get::<R>() {
-            let a = R::borrow(&mut arg1);
-
-            (self)(a);
-
-            data.update::<R>(arg1);
+            (self)(arg1.borrow());
         }
     }
 }
 
-impl<F, R1: RefType, R2: RefType> Querry<(R1, R2)> for F
+impl<F, R1, R2> Querry<(R1, R2)> for F
 where
     F: for<'f1, 'f2> Fn(R1::Ref<'f1>, R2::Ref<'f2>) + Clone,
-    R1::Type: Component,
-    R2::Type: Component,
+    R1: RefType<Type: Component>,
+    R2: RefType<Type: Component>,
 {
-    fn call(self, data: &mut EntityData) {
-        if let Some((mut arg1, mut arg2)) = data.get::<R1>().zip(data.get::<R2>()) {
-            let a = R1::borrow(&mut arg1);
-            let b = R2::borrow(&mut arg2);
+    fn call(self, data: &EntityData) {
+        let datas = try { (data.get::<R1>()?, data.get::<R2>()?) };
 
-            (self)(a, b);
-
-            data.update::<R1>(arg1);
-            data.update::<R2>(arg2);
+        if let Some((mut arg1, mut arg2)) = datas {
+            (self)(arg1.borrow(), arg2.borrow());
         }
     }
 }
