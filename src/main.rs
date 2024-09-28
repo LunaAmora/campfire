@@ -1,37 +1,44 @@
-use campfire::{context::Ctx, system::*, *};
+use campfire::{data, system::new, world::World};
 
 fn main() {
-    let mut ctx = Ctx::default();
-    let player = ctx.new_entity();
+    let mut world = World::default();
+    let player = world.new_entity();
 
-    ctx[player].extend([new_data(Speed(4, 7)), new_data(Position(0, 0))]);
+    world[player].extend([
+        data::new(Velocity { dx: 4.0, dy: 7.0 }),
+        data::new(Position { x: 0.0, y: 0.0 }),
+    ]);
 
-    ctx.systems.extend([
+    world.systems.extend([
         new::<(&_, &_)>(display_vars),
-        new::<(&mut _, &_)>(|Position(x, y): &mut _, Speed(x_vel, y_vel): &_| {
-            *x += x_vel;
-            *y += y_vel;
+        new::<(&mut Position, &Velocity)>(|(pos, vel)| {
+            pos.x += vel.dx;
+            pos.y += vel.dy;
         }),
-        new::<&mut _>(|speed: &mut Speed| {
-            speed.0 += 1;
-            speed.1 -= 1;
+        new::<&mut Velocity>(|vel| {
+            vel.dx += 1.0;
+            vel.dy -= 1.0;
         }),
     ]);
 
-    ctx.next_update();
-    ctx.next_update();
-    ctx.next_update();
+    world.run();
+    world.run();
+    world.run();
 }
 
-fn display_vars(Position(x, y): &Position, Speed(x_vel, y_vel): &Speed) {
-    println!("Entity position : {x}:{y}");
-    println!("       velocity : {x_vel}:{y_vel}\n");
+fn display_vars((pos, vel): (&Position, &Velocity)) {
+    println!("Entity position : {}:{}", pos.x, pos.y);
+    println!("       velocity : {}:{}\n", vel.dx, vel.dy);
 }
 
 #[derive(Debug, Clone)]
-struct Speed(usize, usize);
-impl Component for Speed {}
+pub struct Position {
+    pub x: f32,
+    pub y: f32,
+}
 
 #[derive(Debug, Clone)]
-struct Position(usize, usize);
-impl Component for Position {}
+pub struct Velocity {
+    pub dx: f32,
+    pub dy: f32,
+}

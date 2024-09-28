@@ -1,22 +1,21 @@
-use crate::{system::*, *};
-use std::ops::IndexMut;
+use std::ops::{Index, IndexMut};
 
-use std::ops::Index;
+use crate::{system::*, *};
 
 #[derive(Default)]
-pub struct Ctx {
+pub struct World {
     pub systems: Vec<Box<dyn System>>,
-    pub entities: Vec<EntityData>,
+    entities: Vec<EntityData>,
 }
 
-impl Ctx {
+impl World {
     pub fn new_entity(&mut self) -> EntityId {
         let id = self.entities.len();
         self.entities.push(EntityData::default());
         EntityId(id)
     }
 
-    pub fn next_update(&mut self) {
+    pub fn run(&mut self) {
         for sys in &self.systems {
             for entity in &mut self.entities {
                 sys.clone_box().call_with_data(entity);
@@ -25,7 +24,7 @@ impl Ctx {
     }
 }
 
-impl Index<EntityId> for Ctx {
+impl Index<EntityId> for World {
     type Output = EntityData;
 
     fn index(&self, EntityId(id): EntityId) -> &Self::Output {
@@ -33,7 +32,7 @@ impl Index<EntityId> for Ctx {
     }
 }
 
-impl IndexMut<EntityId> for Ctx {
+impl IndexMut<EntityId> for World {
     fn index_mut(&mut self, EntityId(id): EntityId) -> &mut Self::Output {
         &mut self.entities[id]
     }

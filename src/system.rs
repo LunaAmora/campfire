@@ -1,68 +1,117 @@
-use crate::{family::RefType, Component, EntityData};
+use std::marker::PhantomData;
+
+use crate::{Component, EntityData};
 
 pub trait System {
     fn clone_box<'a>(&'a self) -> Box<dyn System + 'a>;
     fn call_with_data(self: Box<Self>, data: &mut EntityData);
 }
 
-pub fn new<C: 'static>(query: impl Query<C> + 'static) -> Box<dyn System> {
+pub fn new<Q>(system: impl for<'f> FnOnce(Q::Refs<'f>) + Clone + 'static) -> Box<dyn System>
+where
+    Q: Query + 'static,
+{
     Box::new(QueryHandler {
-        query,
-        callable: Query::call,
+        query: PhantomData,
+        system,
     })
 }
 
-struct QueryHandler<Q> {
-    pub query: Q,
-    pub callable: fn(Q, &EntityData),
+struct QueryHandler<Q, S>
+where
+    Q: Query,
+    S: for<'f> FnOnce(Q::Refs<'f>) + Clone,
+{
+    query: PhantomData<Q>,
+    system: S,
 }
 
-impl<Q: Clone> Clone for QueryHandler<Q> {
+impl<Q, S> Clone for QueryHandler<Q, S>
+where
+    Q: Query,
+    S: for<'f> FnOnce(Q::Refs<'f>) + Clone,
+{
     fn clone(&self) -> Self {
         Self {
-            query: self.query.clone(),
-            callable: self.callable,
+            query: PhantomData,
+            system: self.system.clone(),
         }
     }
 }
 
-impl<Q: Clone> System for QueryHandler<Q> {
+impl<Q, S> System for QueryHandler<Q, S>
+where
+    Q: Query,
+    S: for<'f> FnOnce(Q::Refs<'f>) + Clone,
+{
     fn clone_box<'a>(&'a self) -> Box<dyn System + 'a> {
         Box::new(self.clone())
     }
 
     fn call_with_data(self: Box<Self>, data: &mut EntityData) {
-        (self.callable)(self.query, data);
+        Q::call(self.system, data);
     }
 }
 
-pub trait Query<C>: Clone {
-    fn call(self, data: &EntityData);
+pub trait Query {
+    type Refs<'f>;
+
+    fn call<S>(f: S, data: &EntityData)
+    where
+        S: for<'f> FnOnce(Self::Refs<'f>) + Clone;
 }
 
-impl<F, R> Query<R> for F
+impl<C> Query for C
 where
-    F: for<'f> Fn(R::Ref<'f>) + Clone,
-    R: RefType<Type: Component>,
+    C: Component,
 {
-    fn call(self, data: &EntityData) {
-        if let Some(mut arg1) = data.get::<R>() {
-            (self)(arg1.borrow());
+    type Refs<'f> = C::Ref<'f>;
+
+    fn call<S>(f: S, data: &EntityData)
+    where
+        S: for<'f> FnOnce(Self::Refs<'f>) + Clone,
+    {
+        if let Some(mut arg1) = data.get::<C>() {
+            f(arg1.borrow());
         }
     }
 }
 
-impl<F, R1, R2> Query<(R1, R2)> for F
+impl<C1, C2> Query for (C1, C2)
 where
-    F: for<'f1, 'f2> Fn(R1::Ref<'f1>, R2::Ref<'f2>) + Clone,
-    R1: RefType<Type: Component>,
-    R2: RefType<Type: Component>,
+    C1: Component,
+    C2: Component,
 {
-    fn call(self, data: &EntityData) {
-        let datas = try { (data.get::<R1>()?, data.get::<R2>()?) };
+    type Refs<'f> = (C1::Ref<'f>, C2::Ref<'f>);
+
+    fn call<S>(f: S, data: &EntityData)
+    where
+        S: for<'f> FnOnce(Self::Refs<'f>) + Clone,
+    {
+        let datas = try { (data.get::<C1>()?, data.get::<C2>()?) };
 
         if let Some((mut arg1, mut arg2)) = datas {
-            (self)(arg1.borrow(), arg2.borrow());
+            f((arg1.borrow(), arg2.borrow()));
+        }
+    }
+}
+
+impl<C1, C2, C3> Query for (C1, C2, C3)
+where
+    C1: Component,
+    C2: Component,
+    C3: Component,
+{
+    type Refs<'f> = (C1::Ref<'f>, C2::Ref<'f>, C3::Ref<'f>);
+
+    fn call<S>(f: S, data: &EntityData)
+    where
+        S: for<'f> FnOnce(Self::Refs<'f>) + Clone,
+    {
+        let datas = try { (data.get::<C1>()?, data.get::<C2>()?, data.get::<C3>()?) };
+
+        if let Some((mut arg1, mut arg2, mut arg3)) = datas {
+            f((arg1.borrow(), arg2.borrow(), arg3.borrow()));
         }
     }
 }
