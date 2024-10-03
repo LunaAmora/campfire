@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 
-use crate::{Component, EntityData};
+use crate::{family::RefType, Component, EntityData};
 
 pub trait System {
     fn clone_box<'a>(&'a self) -> Box<dyn System + 'a>;
-    fn call_with_data(self: Box<Self>, data: &mut EntityData);
+    fn call_with_data(self: Box<Self>, data: &EntityData);
 }
 
 pub fn new<Q>(system: impl for<'f> FnOnce(Q::Refs<'f>) + Clone + 'static) -> Box<dyn System>
@@ -48,7 +48,7 @@ where
         Box::new(self.clone())
     }
 
-    fn call_with_data(self: Box<Self>, data: &mut EntityData) {
+    fn call_with_data(self: Box<Self>, data: &EntityData) {
         Q::call(self.system, data);
     }
 }
@@ -63,7 +63,7 @@ pub trait Query {
 
 impl<C> Query for C
 where
-    C: Component,
+    C: RefType<Type: Component>,
 {
     type Refs<'f> = C::Ref<'f>;
 
@@ -77,41 +77,28 @@ where
     }
 }
 
-impl<C1, C2> Query for (C1, C2)
-where
-    C1: Component,
-    C2: Component,
-{
-    type Refs<'f> = (C1::Ref<'f>, C2::Ref<'f>);
+macro_rules! impl_query_tuple {
+    ($($T:ident),*) => {
+        impl<$($T,)*> Query for ($($T,)*)
+        where
+            $($T: RefType<Type: Component>,)*
+        {
+            type Refs<'f> = ($($T::Ref<'f>,)*);
 
-    fn call<S>(f: S, data: &EntityData)
-    where
-        S: for<'f> FnOnce(Self::Refs<'f>) + Clone,
-    {
-        let datas = try { (data.get::<C1>()?, data.get::<C2>()?) };
-
-        if let Some((mut arg1, mut arg2)) = datas {
-            f((arg1.borrow(), arg2.borrow()));
+            #[allow(non_snake_case)]
+            fn call<S>(f: S, data: &EntityData)
+            where
+                S: for<'f> FnOnce(Self::Refs<'f>) + Clone,
+            {
+                $(
+                    let Some(mut $T) = data.get::<$T>() else { return };
+                )*
+                f(($($T.borrow(),)*));
+            }
         }
-    }
+    };
 }
 
-impl<C1, C2, C3> Query for (C1, C2, C3)
-where
-    C1: Component,
-    C2: Component,
-    C3: Component,
-{
-    type Refs<'f> = (C1::Ref<'f>, C2::Ref<'f>, C3::Ref<'f>);
-
-    fn call<S>(f: S, data: &EntityData)
-    where
-        S: for<'f> FnOnce(Self::Refs<'f>) + Clone,
-    {
-        let datas = try { (data.get::<C1>()?, data.get::<C2>()?, data.get::<C3>()?) };
-
-        if let Some((mut arg1, mut arg2, mut arg3)) = datas {
-            f((arg1.borrow(), arg2.borrow(), arg3.borrow()));
-        }
-    }
-}
+impl_query_tuple!(C1);
+impl_query_tuple!(C1, C2);
+impl_query_tuple!(C1, C2, C3);

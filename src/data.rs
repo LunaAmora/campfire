@@ -1,15 +1,13 @@
-use super::EntityData;
-use core::error::request_value;
 use std::{
-    any::{Any, TypeId},
+    any::TypeId,
     error::{Error, Request},
     fmt::{Debug, Display},
 };
 
-trait Erased: Any + Error {}
+pub(crate) trait Erased: Error {}
 
 #[derive(Debug)]
-pub struct Data(Box<dyn Erased>);
+pub struct Data(pub(crate) Box<dyn Erased>);
 
 #[derive(Debug)]
 struct RawComponent<C: 'static>(C);
@@ -28,13 +26,7 @@ impl<C: Debug + Clone> Error for RawComponent<C> {
     }
 }
 
-pub trait Component: Debug + Clone + 'static {
-    fn from_data(EntityData(data): &EntityData) -> Option<Self> {
-        data.borrow()
-            .get(&TypeId::of::<Self>())
-            .and_then(|Data(c)| request_value::<Self>(&**c))
-    }
-}
+pub trait Component: Debug + Clone + 'static {}
 
 impl<C: Debug + Clone + 'static> Component for C {}
 

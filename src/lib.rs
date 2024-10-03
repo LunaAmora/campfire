@@ -1,54 +1,96 @@
 #![feature(error_generic_member_access)]
-#![feature(try_blocks)]
-#![feature(trait_alias)]
 
+use data::{Component, Data};
+use family::RefType;
 use std::{
-    any::TypeId, cell::RefCell, collections::HashMap, marker::PhantomData, mem::ManuallyDrop,
+    any::TypeId,
+    cell::RefCell,
+    collections::HashMap,
+    error::request_value,
+    mem::ManuallyDrop,
+    ops::{Index, IndexMut},
 };
+use system::System;
 
 pub mod data;
 mod family;
 pub mod system;
-pub mod world;
-
-trait Component = family::RefType<Type: data::Component>;
 
 #[derive(Clone, Copy)]
 pub struct EntityId(usize);
 
 #[derive(Default)]
-pub struct EntityData(RefCell<HashMap<TypeId, data::Data>>);
+pub struct World {
+    pub systems: Vec<Box<dyn System>>,
+    entities: Vec<EntityData>,
+}
+
+impl World {
+    pub fn new_entity(&mut self) -> EntityId {
+        let id = self.entities.len();
+        self.entities.push(EntityData::default());
+        EntityId(id)
+    }
+
+    pub fn run(&self) {
+        for sys in &self.systems {
+            for entity in &self.entities {
+                sys.clone_box().call_with_data(entity);
+            }
+        }
+    }
+}
+
+impl Index<EntityId> for World {
+    type Output = EntityData;
+
+    fn index(&self, EntityId(id): EntityId) -> &Self::Output {
+        &self.entities[id]
+    }
+}
+
+impl IndexMut<EntityId> for World {
+    fn index_mut(&mut self, EntityId(id): EntityId) -> &mut Self::Output {
+        &mut self.entities[id]
+    }
+}
+
+#[derive(Default)]
+pub struct EntityData(RefCell<HashMap<TypeId, Data>>);
 
 impl EntityData {
-    pub fn extend<I>(&mut self, iter: I)
+    pub fn extend<I>(&self, iter: I)
     where
-        I: IntoIterator<Item = (TypeId, data::Data)>,
+        I: IntoIterator<Item = (TypeId, Data)>,
     {
         self.0.borrow_mut().extend(iter);
     }
 
-    fn get<C: Component>(&self) -> Option<DataRef<C>> {
-        data::Component::from_data(self)
-            .map(|data| DataRef(ManuallyDrop::new(data), self, PhantomData))
+    fn get<C: RefType<Type: Component>>(&self) -> Option<DataRef<C>> {
+        self.0
+            .borrow()
+            .get(&TypeId::of::<C::Type>())
+            .and_then(|Data(c)| request_value::<C::Type>(&**c))
+            .map(|data| DataRef(self, ManuallyDrop::new(data)))
     }
 
-    fn update<C: Component>(&self, t: C::Type) {
+    fn update<C: RefType<Type: Component>>(&self, t: C::Type) {
         let (id, comp) = data::new(t);
         self.0.borrow_mut().insert(id, comp);
     }
 }
 
-struct DataRef<'entity, C: Component>(ManuallyDrop<C::Type>, &'entity EntityData, PhantomData<C>);
+struct DataRef<'entity, C: RefType<Type: Component>>(&'entity EntityData, ManuallyDrop<C::Type>);
 
-impl<'entity, C: Component> DataRef<'entity, C> {
+impl<'entity, C: RefType<Type: Component>> DataRef<'entity, C> {
     fn borrow(&mut self) -> C::Ref<'_> {
-        C::borrow(&mut self.0)
+        C::borrow(&mut self.1)
     }
 }
 
-impl<'entity, C: Component> Drop for DataRef<'entity, C> {
+impl<'entity, C: RefType<Type: Component>> Drop for DataRef<'entity, C> {
     fn drop(&mut self) {
-        let DataRef(data, entity_data, _) = self;
+        let DataRef(entity_data, data) = self;
 
         if C::IS_MUT {
             let data = unsafe { ManuallyDrop::take(data) };
