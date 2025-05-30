@@ -12,7 +12,7 @@ where
     Q: Query + 'static,
 {
     Box::new(QueryHandler {
-        query: PhantomData,
+        query: PhantomData::<Q>,
         system,
     })
 }
