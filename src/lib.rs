@@ -66,7 +66,7 @@ impl EntityData {
         self.0.borrow_mut().extend(iter);
     }
 
-    fn get<C: RefType<Type: Component>>(&self) -> Option<DataRef<C>> {
+    fn get<C: RefType<Type: Component>>(&'_ self) -> Option<DataRef<'_, C>> {
         self.0
             .borrow()
             .get(&TypeId::of::<C::Type>())
@@ -82,13 +82,13 @@ impl EntityData {
 
 struct DataRef<'entity, C: RefType<Type: Component>>(&'entity EntityData, ManuallyDrop<C::Type>);
 
-impl<'entity, C: RefType<Type: Component>> DataRef<'entity, C> {
+impl<C: RefType<Type: Component>> DataRef<'_, C> {
     fn borrow(&mut self) -> C::Ref<'_> {
         C::borrow(&mut self.1)
     }
 }
 
-impl<'entity, C: RefType<Type: Component>> Drop for DataRef<'entity, C> {
+impl<C: RefType<Type: Component>> Drop for DataRef<'_, C> {
     fn drop(&mut self) {
         let DataRef(entity_data, data) = self;
 

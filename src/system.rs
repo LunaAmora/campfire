@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::{family::RefType, Component, EntityData};
+use crate::{Component, EntityData, family::RefType};
 
 pub trait System {
     fn clone_box<'a>(&'a self) -> Box<dyn System + 'a>;
@@ -85,7 +85,7 @@ macro_rules! impl_query_tuple {
         {
             type Refs<'f> = ($($T::Ref<'f>,)*);
 
-            #[allow(non_snake_case)]
+            #[allow(non_snake_case, reason = "T is used as a variable name and as a type parameter")]
             fn call<S>(f: S, data: &EntityData)
             where
                 S: for<'f> FnOnce(Self::Refs<'f>) + Clone,

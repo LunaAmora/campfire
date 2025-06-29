@@ -1,4 +1,4 @@
-use campfire::{data, system::new, World};
+use campfire::{World, data, system::new};
 
 fn main() {
     let mut world = World::default();

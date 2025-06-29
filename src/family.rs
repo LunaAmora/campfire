@@ -9,7 +9,7 @@ pub trait RefType {
     fn borrow(t: &mut Self::Type) -> Self::Ref<'_>;
 }
 
-impl<'a, T> RefType for &'a T {
+impl<T> RefType for &T {
     const IS_MUT: bool = false;
 
     type Type = T;
@@ -23,7 +23,7 @@ impl<'a, T> RefType for &'a T {
     }
 }
 
-impl<'a, T> RefType for &'a mut T {
+impl<T> RefType for &mut T {
     const IS_MUT: bool = true;
 
     type Type = T;
